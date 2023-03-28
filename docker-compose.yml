@@ -1,10 +1,10 @@
 version: "3"
 services:
-  db:
-    container_name: db
+  auth-db:
+    container_name: auth-db
     image: postgres
     volumes:
-      - ./db_data:/var/lib/postgresql/data
+      - ./auth/db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -16,38 +16,82 @@ services:
       POSTGRES_DB: auth_db
     ports:
       - "5433:5432"
+  backend-db:
+    container_name: backend-db
+    image: postgres
+    volumes:
+      - ./backend/db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: backend_db
+    ports:
+      - "5434:5432"
   redis:
     container_name: redis
     image: redis
     ports:
       - "6379:6379"
-  server:
-    build: .
+  auth-server:
+    build: ../auth-service/
     ports:
-      - "3000:3000"
+      - "5000:5000"
     depends_on:
-      db:
+      auth-db:
         condition: service_healthy
     environment:
-      DB_HOST: db
+      DB_HOST: auth-db
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: auth_db
       DB_PORT: 5432
       NODE_ENV: docker
       SECRET: secret
-    
-  migration:
+  auth-migration:
     build:
-      context: .
+      context: ../auth-service/
       dockerfile: Dockerfile.migration
     depends_on:
-      db:
+      auth-db:
         condition: service_healthy
     environment:
-      DB_HOST: db
+      DB_HOST: auth-db
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: auth_db
+      DB_PORT: 5432
+      NODE_ENV: migration
+  backend-server:
+    build: ../final-eval-be/
+    ports:
+      - "4000:4000"
+    depends_on:
+      backend-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: backend-db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: backend_db
+      DB_PORT: 5432
+      NODE_ENV: docker
+      SECRET: secret
+  backend-migration:
+    build:
+      context: ../final-eval-be/
+      dockerfile: Dockerfile.migration
+    depends_on:
+      backend-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: backend-db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: backend_db
       DB_PORT: 5432
       NODE_ENV: migration
